@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Distance-based Student Attendance</title>
+    <style>
+        body { font-family: Arial; margin: 30px; }
+        .container { width: 400px; }
+        .btn {
+            padding: 10px; margin: 5px; cursor: pointer;
+            background: #007bff; color: white; border: none; border-radius: 5px;
+        }
+        .btn:hover { background: #0056b3; }
+
+        #attendanceTable { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        #attendanceTable td, #attendanceTable th {
+            border: 1px solid black; padding: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Student Attendance</h2>
+
+    <label>Enter Student Name:</label>
+    <input type="text" id="studentName" placeholder="Student Name" style="width:100%; padding:8px;">
+    <br><br>
+
+    <label>Select Subject:</label>
+    <select id="subject" style="width:100%; padding:8px;">
+        <option value="">-- Select Subject --</option>
+        <option value="DEL">DEL</option>
+        <option value="EC">EC</option>
+        <option value="M3">M3</option>
+        <option value="PFM">PFM</option>
+        <option value="UHV">UHV</option>
+        <option value="DSA">DSA</option>
+    </select>
+
+    <br><br>
+
+    <button class="btn" onclick="getLocation()">Get Location</button>
+    <div id="locationResult" style="margin:10px 0; font-weight:bold;"></div>
+
+    <button class="btn" onclick="showOptions()">Mark Attendance</button>
+
+    <div id="options" style="display:none;">
+        <h3>Confirm Attendance</h3>
+        <button class="btn" onclick="mark()">Mark Attendance</button>
+    </div>
+
+    <div id="result" style="margin-top:10px; font-weight:bold;"></div>
+
+    <br>
+    <button class="btn" onclick="showAttendance()">Show Weekly Attendance</button>
+</div>
+
+<!-- Attendance Table -->
+<table id="attendanceTable" style="display:none;">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Distance</th>
+        </tr>
+    </thead>
+    <tbody id="attendanceBody"></tbody>
+</table>
+
+<script>
+let attendanceRecords = [];
+let studentLatitude = null;
+let studentLongitude = null;
+
+// HOD Cabin Coordinates (change these to your actual coordinates)
+const hodLat = 28.7041; // example latitude
+const hodLon = 77.1025; // example longitude
+const maxDistance = 3; // meters
+
+// Get student location
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(showPosition, showError);
+    } else {
+        document.getElementById("locationResult").innerHTML =
+            "Geolocation is not supported by this browser.";
+    }
+}
+
+function showPosition(position) {
+    studentLatitude = position.coords.latitude;
+    studentLongitude = position.coords.longitude;
+    document.getElementById("locationResult").innerHTML =
+        `Latitude: ${studentLatitude} <br> Longitude: ${studentLongitude}`;
+}
+
+function showError(error) {
+    let msg = "";
+    switch(error.code) {
+        case error.PERMISSION_DENIED: msg = "You denied the request for location."; break;
+        case error.POSITION_UNAVAILABLE: msg = "Location information is unavailable."; break;
+        case error.TIMEOUT: msg = "The request to get location timed out."; break;
+        default: msg = "An unknown error occurred."; break;
+    }
+    document.getElementById("locationResult").innerHTML = msg;
+}
+
+// Show options button
+function showOptions() {
+    let name = document.getElementById("studentName").value;
+    let subject = document.getElementById("subject").value;
+
+    if (name.trim() === "") { alert("Enter student name"); return; }
+    if (subject === "") { alert("Select subject"); return; }
+    if (studentLatitude === null) { alert("Please get location first!"); return; }
+
+    document.getElementById("options").style.display = "block";
+}
+
+// Haversine formula to calculate distance in meters
+function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // radius of earth in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+              Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2)*Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    return distance;
+}
+
+// Mark attendance
+function mark() {
+    let name = document.getElementById("studentName").value;
+    let subject = document.getElementById("subject").value;
+
+    const distance = getDistanceFromLatLonInMeters(studentLatitude, studentLongitude, hodLat, hodLon);
+    const status = (distance <= maxDistance) ? "Present" : "Absent";
+
+    const today = new Date();
+    const date = today.toLocaleDateString("en-GB");
+
+    attendanceRecords.push({
+        name: name,
+        subject: subject,
+        status: status,
+        date: date,
+        latitude: studentLatitude,
+        longitude: studentLongitude,
+        distance: distance.toFixed(2) + " m"
+    });
+
+    document.getElementById("result").innerHTML =
+        `${name} marked <span style="color:green">${status}</span> for 
+        <span style="color:blue">${subject}</span> on ${date}<br>
+        Distance from HOD cabin: ${distance.toFixed(2)} m`;
+
+    document.getElementById("options").style.display = "none";
+}
+
+// Show weekly attendance
+function showAttendance() {
+    let table = document.getElementById("attendanceTable");
+    let tbody = document.getElementById("attendanceBody");
+    tbody.innerHTML = "";
+
+    let now = new Date();
+    let weekAgo = new Date();
+    weekAgo.setDate(now.getDate() - 6);
+
+    attendanceRecords.forEach(record => {
+        let recDate = new Date(record.date.split("/").reverse().join("-"));
+        if (recDate >= weekAgo && recDate <= now) {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${record.date}</td>
+                    <td>${record.name}</td>
+                    <td>${record.subject}</td>
+                    <td>${record.status}</td>
+                    <td>${record.latitude}</td>
+                    <td>${record.longitude}</td>
+                    <td>${record.distance}</td>
+                </tr>`;
+        }
+    });
+
+    table.style.display = "table";
+}
+</script>
+</body>
+</html>
